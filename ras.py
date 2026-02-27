@@ -27,6 +27,9 @@ logging.getLogger('telebot').setLevel(logging.CRITICAL)
 class Config:
     GROUP_NAME = "ОС-301"
     
+    # ✅ ВАШ CHAT ID (уже вписан)
+    OWNER_ID = 1488923831
+    
     WEEKDAYS = {
         "Monday": "Понедельник",
         "Tuesday": "Вторник",
@@ -120,7 +123,7 @@ class ScheduleAPI:
             content = response.text
             data = self._extract_json(content)
             
-            if data:
+            if 
                 log(f"✅ Получено {len(data)} дней")
                 return data
             else:
@@ -155,7 +158,7 @@ class ScheduleAPI:
     
     def get_day_schedule(self, date_str):
         data = self.get_schedule_data(date_str, date_str)
-        if data:
+        if 
             for day in data:
                 day_date = day.get("date", "")
                 if "T" in day_date:
@@ -224,7 +227,7 @@ def get_weekday_russian(date_str):
 
 
 def format_day_schedule(day_data):
-    if not day_data:
+    if not day_
         return "❌ Данные не найдены"
     
     date_str = day_data.get("date", "")
@@ -277,7 +280,7 @@ def format_day_schedule(day_data):
 
 
 def format_week_schedule(week_data, week_name="неделю"):
-    if not week_data:
+    if not week_
         return "❌ Данные не найдены"
     
     lines = []
@@ -355,7 +358,7 @@ class CacheManager:
 
 
 def get_schedule_hash(day_data):
-    if not day_data:
+    if not day_
         return "empty"
     
     lessons = day_data.get("lessons", [])
@@ -468,6 +471,38 @@ class ScheduleBot:
 `/date 2026-02-25`
             """
             self.bot.reply_to(message, help_text, parse_mode="Markdown")
+        
+        # 🔐 СКРЫТАЯ КОМАНДА РАССЫЛКИ (только для владельца ID: 1488923831)
+        @self.bot.message_handler(commands=['broadcast'])
+        def cmd_broadcast(message):
+            if str(message.chat.id) != str(Config.OWNER_ID):
+                return  # Игнорируем без ответа
+            
+            text = message.text.replace("/broadcast", "").strip()
+            if not text:
+                self.bot.reply_to(message, "📝 Использование: /broadcast Ваш текст")
+                return
+            
+            users = self.users.get_all_users()
+            sent = 0
+            failed = 0
+            
+            for chat_id in users:
+                try:
+                    self.bot.send_message(
+                        chat_id, 
+                        text, 
+                        parse_mode="Markdown",
+                        disable_web_page_preview=True
+                    )
+                    sent += 1
+                    time.sleep(0.5)
+                except Exception as e:
+                    failed += 1
+                    log(f"❌ Не отправлено {chat_id}: {e}", "ERROR")
+            
+            report = f"✅ Рассылка: {sent} доставлено, {failed} ошибок"
+            self.bot.send_message(message.chat.id, report)
         
         @self.bot.message_handler(func=lambda message: message.text == "📅 Сегодня")
         def btn_today(message):
@@ -789,7 +824,9 @@ if __name__ == "__main__":
     print("   Проверка: 7 дней вперёд")
     print("   Таймаут: 60 сек")
     print("   Кнопки: ✅")
+    print(f"   Owner ID: {Config.OWNER_ID}")
     print("=" * 50 + "\n")
     
     bot = ScheduleBot()
     bot.run()
+
