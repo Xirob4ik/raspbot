@@ -2,9 +2,6 @@
 # -*- coding: utf-8 -*-
 """
 🎓 БОТ РАСПИСАНИЯ ГРУППЫ ОС-301
-Сайт: https://poo.edu-74.ru
-Автопроверка: каждые 20 минут
-Проверка: 7 дней вперёд
 """
 
 import requests
@@ -18,16 +15,12 @@ import telebot
 from telebot import types
 import threading
 
-# 🛑 ОТКЛЮЧИТЬ СПАМ ОШИБОК TELEBOT
 import logging
 logging.getLogger('telebot').setLevel(logging.CRITICAL)
 
 
-# ======================== НАСТРОЙКИ ========================
 class Config:
     GROUP_NAME = "ОС-301"
-    
-    # ✅ ВАШ CHAT ID (уже вписан)
     OWNER_ID = 1488923831
     
     WEEKDAYS = {
@@ -71,23 +64,14 @@ class Config:
     LOG_FILE = "bot_log.txt"
 
 
-# ======================== КЛАВИАТУРА ========================
 def get_main_keyboard():
     markup = types.ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)
-    btn_today = types.KeyboardButton("📅 Сегодня")
-    btn_tomorrow = types.KeyboardButton("📅 Завтра")
-    btn_week = types.KeyboardButton("📆 Текущая неделя")
-    btn_next_week = types.KeyboardButton("📆 Следующая неделя")
-    btn_settings = types.KeyboardButton("⚙️ Настройки")
-    
-    markup.add(btn_today, btn_tomorrow)
-    markup.add(btn_week, btn_next_week)
-    markup.add(btn_settings)
-    
+    markup.add(types.KeyboardButton("📅 Сегодня"), types.KeyboardButton("📅 Завтра"))
+    markup.add(types.KeyboardButton("📆 Текущая неделя"), types.KeyboardButton("📆 Следующая неделя"))
+    markup.add(types.KeyboardButton("⚙️ Настройки"))
     return markup
 
 
-# ======================== ЛОГИРОВАНИЕ ========================
 def log(message, level="INFO"):
     timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     full_message = f"[{timestamp}] [{level}] {message}"
@@ -99,7 +83,6 @@ def log(message, level="INFO"):
         pass
 
 
-# ======================== API РАСПИСАНИЯ ========================
 class ScheduleAPI:
     def __init__(self):
         self.session = requests.Session()
@@ -114,22 +97,18 @@ class ScheduleAPI:
             start_date=start_date,
             end_date=end_date
         )
-        
         try:
             log(f"📡 Запрос: {start_date} → {end_date}")
             response = self.session.get(url, timeout=15)
             response.raise_for_status()
-            
             content = response.text
             data = self._extract_json(content)
-            
-            if 
+            if data:
                 log(f"✅ Получено {len(data)} дней")
                 return data
             else:
                 log("⚠️ JSON не найден", "WARNING")
                 return None
-                
         except Exception as e:
             log(f"❌ Ошибка: {e}", "ERROR")
             return None
@@ -142,10 +121,8 @@ class ScheduleAPI:
                     return data
             except:
                 pass
-        
         json_pattern = r'\[\s*\{[^{}]*"date"[^{}]*\}(?:\s*,\s*\{[^{}]*\})*\s*\]'
         matches = re.findall(json_pattern, content, re.DOTALL)
-        
         for match in matches:
             try:
                 data = json.loads(match)
@@ -153,12 +130,11 @@ class ScheduleAPI:
                     return data
             except:
                 continue
-        
         return None
     
     def get_day_schedule(self, date_str):
         data = self.get_schedule_data(date_str, date_str)
-        if 
+        if data:
             for day in data:
                 day_date = day.get("date", "")
                 if "T" in day_date:
@@ -178,17 +154,13 @@ class ScheduleAPI:
         return self.get_schedule_data(monday.strftime("%Y-%m-%d"), end_date)
 
 
-# ======================== ФОРМАТИРОВАНИЕ ========================
 def format_lesson(lesson, number):
     start = lesson.get("startTime", "??:??")
     end = lesson.get("endTime", "??:??")
     name = lesson.get("name", "Предмет не указан").replace("\\n", " ").replace("\n", " ").strip()
-    
     if not name:
         name = "Предмет не указан"
-    
     result = f"{number}. *{start} - {end}*: {name}"
-    
     timetable = lesson.get("timetable", {})
     if timetable:
         classroom = timetable.get("classroom", {})
@@ -196,7 +168,6 @@ def format_lesson(lesson, number):
             room = classroom.get("name", "")
             if room:
                 result += f"\n   🏫 Каб. {room}"
-        
         teacher = timetable.get("teacher", {})
         if teacher:
             last = teacher.get("lastName", "")
@@ -204,7 +175,6 @@ def format_lesson(lesson, number):
             middle = teacher.get("middleName", "")
             if last and first:
                 result += f"\n   👨‍🏫 {last} {first} {middle}"
-    
     gradebook = lesson.get("gradebook", {})
     if gradebook:
         tasks = gradebook.get("tasks", [])
@@ -213,7 +183,6 @@ def format_lesson(lesson, number):
             dz = homework[0].get("topic", "Нет")
             if dz:
                 result += f"\n   📝 *ДЗ:* {dz}"
-    
     return result
 
 
@@ -227,13 +196,11 @@ def get_weekday_russian(date_str):
 
 
 def format_day_schedule(day_data):
-    if not day_
+    if not day_data:
         return "❌ Данные не найдены"
-    
     date_str = day_data.get("date", "")
     if "T" in date_str:
         date_str = date_str.split("T")[0]
-    
     try:
         date_obj = datetime.strptime(date_str, "%Y-%m-%d")
         date_formatted = date_obj.strftime("%d.%m.%Y")
@@ -241,26 +208,19 @@ def format_day_schedule(day_data):
     except:
         date_formatted = date_str
         weekday = ""
-    
     lines = []
     lines.append(f"🗓️ *Расписание на {date_formatted} ({weekday})*")
-    
     if day_data.get("isHoliday"):
         lines.append("\n☕ Выходной нах")
         return "\n".join(lines)
-    
     lessons = day_data.get("lessons", [])
-    
     if not lessons:
         lines.append("\nВыходной нах")
         return "\n".join(lines)
-    
     lines.append(f"\n📚 *Всего пар: {len(lessons)}*\n")
-    
     for i, lesson in enumerate(lessons, 1):
         lines.append(format_lesson(lesson, i))
         lines.append("")
-    
     total_min = 0
     for lesson in lessons:
         try:
@@ -271,26 +231,21 @@ def format_day_schedule(day_data):
             total_min += (eh * 60 + em) - (sh * 60 + sm)
         except:
             pass
-    
     hours = total_min // 60
     mins = total_min % 60
     lines.append(f"⏱️ *Общее время:* {hours}ч {mins}мин")
-    
     return "\n".join(lines)
 
 
 def format_week_schedule(week_data, week_name="неделю"):
-    if not week_
+    if not week_data:
         return "❌ Данные не найдены"
-    
     lines = []
     lines.append(f"📅 *Расписание на {week_name}*\n")
-    
     for day in week_data:
         date_str = day.get("date", "")
         if "T" in date_str:
             date_str = date_str.split("T")[0]
-        
         try:
             date_obj = datetime.strptime(date_str, "%Y-%m-%d")
             date_formatted = date_obj.strftime("%d.%m.%Y")
@@ -298,10 +253,8 @@ def format_week_schedule(week_data, week_name="неделю"):
         except:
             date_formatted = date_str
             weekday = ""
-        
         lessons = day.get("lessons", [])
         is_holiday = day.get("isHoliday", False)
-        
         if is_holiday:
             lines.append(f"🏖️ *{date_formatted} ({weekday})* — Выходной нах\n")
         elif lessons:
@@ -314,11 +267,9 @@ def format_week_schedule(week_data, week_name="неделю"):
             lines.append("")
         else:
             lines.append(f"📋 *{date_formatted} ({weekday})* — Выходной нах\n")
-    
     return "\n".join(lines)
 
 
-# ======================== КЭШИРОВАНИЕ ========================
 class CacheManager:
     def __init__(self, cache_file):
         self.cache_file = cache_file
@@ -344,10 +295,7 @@ class CacheManager:
         return self.data.get(date_str)
     
     def set(self, date_str, schedule_hash):
-        self.data[date_str] = {
-            "hash": schedule_hash,
-            "updated": datetime.now().isoformat()
-        }
+        self.data[date_str] = {"hash": schedule_hash, "updated": datetime.now().isoformat()}
         self._save()
     
     def has_changed(self, date_str, new_hash):
@@ -358,20 +306,16 @@ class CacheManager:
 
 
 def get_schedule_hash(day_data):
-    if not day_
+    if not day_data:
         return "empty"
-    
     lessons = day_data.get("lessons", [])
     hash_parts = []
-    
     for lesson in lessons:
         part = f"{lesson.get('startTime')}-{lesson.get('endTime')}-{lesson.get('name', '')}"
         hash_parts.append(part)
-    
     return "|".join(hash_parts)
 
 
-# ======================== УПРАВЛЕНИЕ ПОЛЬЗОВАТЕЛЯМИ ========================
 class UserManager:
     def __init__(self, users_file):
         self.users_file = users_file
@@ -396,10 +340,7 @@ class UserManager:
     def add_user(self, chat_id):
         chat_id = str(chat_id)
         if chat_id not in self.users:
-            self.users[chat_id] = {
-                "added": datetime.now().isoformat(),
-                "last_seen": datetime.now().isoformat()
-            }
+            self.users[chat_id] = {"added": datetime.now().isoformat(), "last_seen": datetime.now().isoformat()}
             self._save()
             log(f"✅ Новый пользователь: {chat_id}")
     
@@ -413,7 +354,6 @@ class UserManager:
         return list(self.users.keys())
 
 
-# ======================== TELEGRAM БОТ ========================
 class ScheduleBot:
     def __init__(self):
         self.bot = telebot.TeleBot(Config.TELEGRAM_BOT_TOKEN)
@@ -421,7 +361,6 @@ class ScheduleBot:
         self.cache = CacheManager(Config.CACHE_FILE)
         self.users = UserManager(Config.USERS_FILE)
         self.auto_check_enabled = True
-        
         self._setup_commands()
         log("✅ Telegram бот создан")
     
@@ -429,78 +368,33 @@ class ScheduleBot:
         @self.bot.message_handler(commands=['start'])
         def cmd_start(message):
             self.users.add_user(message.chat.id)
-            help_text = f"""
-╔══════════════════════════════════════╗
-     🎓 РАСПИСАНИЕ ГРУППЫ {Config.GROUP_NAME}
-╚══════════════════════════════════════╝
-
-Выберите нужный пункт в меню 👇
-            """
-            self.bot.send_message(
-                message.chat.id, 
-                help_text, 
-                reply_markup=get_main_keyboard(),
-                parse_mode="Markdown"
-            )
+            help_text = f"╔══════════════════════════════════════╗\n     🎓 РАСПИСАНИЕ ГРУППЫ {Config.GROUP_NAME}\n╚══════════════════════════════════════╝\n\nВыберите нужный пункт в меню 👇"
+            self.bot.send_message(message.chat.id, help_text, reply_markup=get_main_keyboard(), parse_mode="Markdown")
         
         @self.bot.message_handler(commands=['help'])
         def cmd_help(message):
-            help_text = f"""
-╔══════════════════════════════════════╗
-     🎓 РАСПИСАНИЕ ГРУППЫ {Config.GROUP_NAME}
-╚══════════════════════════════════════╝
-
-*📌 Доступные команды:*
-
-📅 */today* — расписание на сегодня
-📅 */tomorrow* — расписание на завтра
-📅 */week* — расписание на неделю
-📅 */date YYYY-MM-DD* — на конкретную дату
-
-⚙️ */status* — статус бота
-🔔 */on* — включить уведомления
-🔕 */off* — отключить уведомления
-
-*ℹ️ О боте:*
-• Автопроверка каждые 20 минут
-• Уведомления об изменениях
-• Проверка 7 дней вперёд
-• Сайт: poo.edu-74.ru
-
-*💡 Пример:*
-`/date 2026-02-25`
-            """
+            help_text = f"╔══════════════════════════════════════╗\n     🎓 РАСПИСАНИЕ ГРУППЫ {Config.GROUP_NAME}\n╚══════════════════════════════════════╝\n\n*📌 Доступные команды:*\n\n📅 */today* — расписание на сегодня\n📅 */tomorrow* — расписание на завтра\n📅 */week* — расписание на неделю\n📅 */date YYYY-MM-DD* — на конкретную дату\n\n⚙️ */status* — статус бота\n🔔 */on* — включить уведомления\n🔕 */off* — отключить уведомления"
             self.bot.reply_to(message, help_text, parse_mode="Markdown")
         
-        # 🔐 СКРЫТАЯ КОМАНДА РАССЫЛКИ (только для владельца ID: 1488923831)
         @self.bot.message_handler(commands=['broadcast'])
         def cmd_broadcast(message):
             if str(message.chat.id) != str(Config.OWNER_ID):
-                return  # Игнорируем без ответа
-            
+                return
             text = message.text.replace("/broadcast", "").strip()
             if not text:
                 self.bot.reply_to(message, "📝 Использование: /broadcast Ваш текст")
                 return
-            
             users = self.users.get_all_users()
             sent = 0
             failed = 0
-            
             for chat_id in users:
                 try:
-                    self.bot.send_message(
-                        chat_id, 
-                        text, 
-                        parse_mode="Markdown",
-                        disable_web_page_preview=True
-                    )
+                    self.bot.send_message(chat_id, text, parse_mode="Markdown", disable_web_page_preview=True)
                     sent += 1
                     time.sleep(0.5)
                 except Exception as e:
                     failed += 1
                     log(f"❌ Не отправлено {chat_id}: {e}", "ERROR")
-            
             report = f"✅ Рассылка: {sent} доставлено, {failed} ошибок"
             self.bot.send_message(message.chat.id, report)
         
@@ -510,12 +404,7 @@ class ScheduleBot:
             today = datetime.now().strftime("%Y-%m-%d")
             day_data = self.api.get_day_schedule(today)
             text = format_day_schedule(day_data)
-            self.bot.send_message(
-                message.chat.id, 
-                text, 
-                reply_markup=get_main_keyboard(),
-                parse_mode="Markdown"
-            )
+            self.bot.send_message(message.chat.id, text, reply_markup=get_main_keyboard(), parse_mode="Markdown")
         
         @self.bot.message_handler(func=lambda message: message.text == "📅 Завтра")
         def btn_tomorrow(message):
@@ -523,12 +412,7 @@ class ScheduleBot:
             tomorrow = (datetime.now() + timedelta(days=1)).strftime("%Y-%m-%d")
             day_data = self.api.get_day_schedule(tomorrow)
             text = format_day_schedule(day_data)
-            self.bot.send_message(
-                message.chat.id, 
-                text, 
-                reply_markup=get_main_keyboard(),
-                parse_mode="Markdown"
-            )
+            self.bot.send_message(message.chat.id, text, reply_markup=get_main_keyboard(), parse_mode="Markdown")
         
         @self.bot.message_handler(func=lambda message: message.text == "📆 Текущая неделя")
         def btn_week(message):
@@ -536,12 +420,7 @@ class ScheduleBot:
             today = datetime.now().strftime("%Y-%m-%d")
             week_data = self.api.get_week_schedule(today)
             text = format_week_schedule(week_data, "текущую неделю")
-            self.bot.send_message(
-                message.chat.id, 
-                text, 
-                reply_markup=get_main_keyboard(),
-                parse_mode="Markdown"
-            )
+            self.bot.send_message(message.chat.id, text, reply_markup=get_main_keyboard(), parse_mode="Markdown")
         
         @self.bot.message_handler(func=lambda message: message.text == "📆 Следующая неделя")
         def btn_next_week(message):
@@ -549,78 +428,29 @@ class ScheduleBot:
             today = datetime.now().strftime("%Y-%m-%d")
             week_data = self.api.get_next_week_schedule(today)
             text = format_week_schedule(week_data, "следующую неделю")
-            self.bot.send_message(
-                message.chat.id, 
-                text, 
-                reply_markup=get_main_keyboard(),
-                parse_mode="Markdown"
-            )
+            self.bot.send_message(message.chat.id, text, reply_markup=get_main_keyboard(), parse_mode="Markdown")
         
         @self.bot.message_handler(func=lambda message: message.text == "⚙️ Настройки")
         def btn_settings(message):
             self.users.update_user(message.chat.id)
-            settings_text = f"""
-⚙️ *НАСТРОЙКИ БОТА*
-
-🤖 *Статус:*
-• Автопроверка: каждые 20 мин
-• Проверка дней: 7
-• Сегодня: {datetime.now().strftime("%d.%m.%Y")}
-• Пользователей: {len(self.users.get_all_users())}
-
-🔔 *Уведомления:*
-{'✅ Включены' if self.auto_check_enabled else '❌ Выключены'}
-
-*Выберите действие:*
-            """
-            
+            settings_text = f"⚙️ *НАСТРОЙКИ БОТА*\n\n🤖 *Статус:*\n• Автопроверка: каждые 20 мин\n• Сегодня: {datetime.now().strftime('%d.%m.%Y')}\n• Пользователей: {len(self.users.get_all_users())}\n\n🔔 *Уведомления:*\n{'✅ Включены' if self.auto_check_enabled else '❌ Выключены'}"
             markup = types.InlineKeyboardMarkup(row_width=2)
-            btn_on = types.InlineKeyboardButton("🔔 Включить", callback_data="notify_on")
-            btn_off = types.InlineKeyboardButton("🔕 Выключить", callback_data="notify_off")
-            btn_back = types.InlineKeyboardButton("🔙 Назад", callback_data="back_main")
-            
-            markup.add(btn_on, btn_off)
-            markup.add(btn_back)
-            
-            self.bot.send_message(
-                message.chat.id, 
-                settings_text, 
-                reply_markup=markup,
-                parse_mode="Markdown"
-            )
+            markup.add(types.InlineKeyboardButton("🔔 Включить", callback_data="notify_on"), types.InlineKeyboardButton("🔕 Выключить", callback_data="notify_off"))
+            markup.add(types.InlineKeyboardButton("🔙 Назад", callback_data="back_main"))
+            self.bot.send_message(message.chat.id, settings_text, reply_markup=markup, parse_mode="Markdown")
         
         @self.bot.callback_query_handler(func=lambda call: True)
         def callback_handler(call):
             if call.data == "notify_on":
                 self.auto_check_enabled = True
                 self.bot.answer_callback_query(call.id, "✅ Уведомления включены!")
-                self.bot.edit_message_text(
-                    chat_id=call.message.chat.id,
-                    message_id=call.message.message_id,
-                    text=f"⚙️ *НАСТРОЙКИ*\n\n🔔 Уведомления: *ВКЛЮЧЕНЫ*",
-                    parse_mode="Markdown",
-                    reply_markup=get_main_keyboard()
-                )
-            
+                self.bot.edit_message_text(chat_id=call.message.chat.id, message_id=call.message.message_id, text="⚙️ *НАСТРОЙКИ*\n\n🔔 Уведомления: *ВКЛЮЧЕНЫ*", parse_mode="Markdown", reply_markup=get_main_keyboard())
             elif call.data == "notify_off":
                 self.auto_check_enabled = False
                 self.bot.answer_callback_query(call.id, "❌ Уведомления выключены!")
-                self.bot.edit_message_text(
-                    chat_id=call.message.chat.id,
-                    message_id=call.message.message_id,
-                    text=f"⚙️ *НАСТРОЙКИ*\n\n🔕 Уведомления: *ВЫКЛЮЧЕНЫ*",
-                    parse_mode="Markdown",
-                    reply_markup=get_main_keyboard()
-                )
-            
+                self.bot.edit_message_text(chat_id=call.message.chat.id, message_id=call.message.message_id, text="⚙️ *НАСТРОЙКИ*\n\n🔕 Уведомления: *ВЫКЛЮЧЕНЫ*", parse_mode="Markdown", reply_markup=get_main_keyboard())
             elif call.data == "back_main":
-                self.bot.edit_message_text(
-                    chat_id=call.message.chat.id,
-                    message_id=call.message.message_id,
-                    text=f"╔══════════════════════════════════════╗\n     🎓 РАСПИСАНИЕ ГРУППЫ {Config.GROUP_NAME}\n╚══════════════════════════════════════╝\n\nВыберите нужный пункт в меню 👇",
-                    parse_mode="Markdown",
-                    reply_markup=get_main_keyboard()
-                )
+                self.bot.edit_message_text(chat_id=call.message.chat.id, message_id=call.message.message_id, text=f"╔══════════════════════════════════════╗\n     🎓 РАСПИСАНИЕ ГРУППЫ {Config.GROUP_NAME}\n╚══════════════════════════════════════╝\n\nВыберите нужный пункт в меню 👇", parse_mode="Markdown", reply_markup=get_main_keyboard())
         
         @self.bot.message_handler(commands=['today'])
         def cmd_today(message):
@@ -628,12 +458,7 @@ class ScheduleBot:
             today = datetime.now().strftime("%Y-%m-%d")
             day_data = self.api.get_day_schedule(today)
             text = format_day_schedule(day_data)
-            self.bot.send_message(
-                message.chat.id, 
-                text, 
-                reply_markup=get_main_keyboard(),
-                parse_mode="Markdown"
-            )
+            self.bot.send_message(message.chat.id, text, reply_markup=get_main_keyboard(), parse_mode="Markdown")
         
         @self.bot.message_handler(commands=['tomorrow'])
         def cmd_tomorrow(message):
@@ -641,12 +466,7 @@ class ScheduleBot:
             tomorrow = (datetime.now() + timedelta(days=1)).strftime("%Y-%m-%d")
             day_data = self.api.get_day_schedule(tomorrow)
             text = format_day_schedule(day_data)
-            self.bot.send_message(
-                message.chat.id, 
-                text, 
-                reply_markup=get_main_keyboard(),
-                parse_mode="Markdown"
-            )
+            self.bot.send_message(message.chat.id, text, reply_markup=get_main_keyboard(), parse_mode="Markdown")
         
         @self.bot.message_handler(commands=['week'])
         def cmd_week(message):
@@ -654,12 +474,7 @@ class ScheduleBot:
             today = datetime.now().strftime("%Y-%m-%d")
             week_data = self.api.get_week_schedule(today)
             text = format_week_schedule(week_data, "текущую неделю")
-            self.bot.send_message(
-                message.chat.id, 
-                text, 
-                reply_markup=get_main_keyboard(),
-                parse_mode="Markdown"
-            )
+            self.bot.send_message(message.chat.id, text, reply_markup=get_main_keyboard(), parse_mode="Markdown")
         
         @self.bot.message_handler(commands=['date'])
         def cmd_date(message):
@@ -673,74 +488,38 @@ class ScheduleBot:
                 datetime.strptime(date_str, "%Y-%m-%d")
                 day_data = self.api.get_day_schedule(date_str)
                 text = format_day_schedule(day_data)
-                self.bot.send_message(
-                    message.chat.id, 
-                    text, 
-                    reply_markup=get_main_keyboard(),
-                    parse_mode="Markdown"
-                )
+                self.bot.send_message(message.chat.id, text, reply_markup=get_main_keyboard(), parse_mode="Markdown")
             except ValueError:
-                self.bot.reply_to(message, "❌ Неверный формат даты!\nИспользуйте: /date 2026-02-25")
+                self.bot.reply_to(message, "❌ Неверный формат даты!")
         
         @self.bot.message_handler(commands=['status'])
         def cmd_status(message):
             self.users.update_user(message.chat.id)
-            status = f"""
-🤖 *Статус бота*
-
-⏱️ Автопроверка: каждые 20 мин
-📅 Сегодня: {datetime.now().strftime("%d.%m.%Y")}
-💾 Кэш дней: {len(self.cache.data)}
-👥 Пользователей: {len(self.users.get_all_users())}
-✅ Статус: Работает
-            """
-            self.bot.send_message(
-                message.chat.id, 
-                status, 
-                reply_markup=get_main_keyboard(),
-                parse_mode="Markdown"
-            )
+            status = f"🤖 *Статус бота*\n\n⏱️ Автопроверка: каждые 20 мин\n📅 Сегодня: {datetime.now().strftime('%d.%m.%Y')}\n💾 Кэш дней: {len(self.cache.data)}\n👥 Пользователей: {len(self.users.get_all_users())}\n✅ Статус: Работает"
+            self.bot.send_message(message.chat.id, status, reply_markup=get_main_keyboard(), parse_mode="Markdown")
         
         @self.bot.message_handler(commands=['off'])
         def cmd_off(message):
             self.users.update_user(message.chat.id)
             self.auto_check_enabled = False
-            self.bot.send_message(
-                message.chat.id, 
-                "🔕 Уведомления отключены",
-                reply_markup=get_main_keyboard()
-            )
+            self.bot.send_message(message.chat.id, "🔕 Уведомления отключены", reply_markup=get_main_keyboard())
         
         @self.bot.message_handler(commands=['on'])
         def cmd_on(message):
             self.users.update_user(message.chat.id)
             self.auto_check_enabled = True
-            self.bot.send_message(
-                message.chat.id, 
-                "🔔 Уведомления включены",
-                reply_markup=get_main_keyboard()
-            )
+            self.bot.send_message(message.chat.id, "🔔 Уведомления включены", reply_markup=get_main_keyboard())
     
     def send_change_notification(self, changed_dates):
-        text = f"🔔 *Обновление расписания!*\n\n"
-        text += f"Изменения обнаружены в {len(changed_dates)} дн(я/ей):\n\n"
-        
+        text = f"🔔 *Обновление расписания!*\n\nИзменения обнаружены в {len(changed_dates)} дн(я/ей):\n\n"
         for date_str in changed_dates:
             day_data = self.api.get_day_schedule(date_str)
-            text += format_day_schedule(day_data)
-            text += "\n" + "-" * 40 + "\n"
-        
+            text += format_day_schedule(day_data) + "\n" + "-" * 40 + "\n"
         users = self.users.get_all_users()
         log(f"📩 Отправка уведомления {len(users)} пользователям")
-        
         for chat_id in users:
             try:
-                self.bot.send_message(
-                    chat_id, 
-                    text, 
-                    reply_markup=get_main_keyboard(),
-                    parse_mode="Markdown"
-                )
+                self.bot.send_message(chat_id, text, reply_markup=get_main_keyboard(), parse_mode="Markdown")
                 time.sleep(0.5)
             except Exception as e:
                 log(f"❌ Ошибка отправки {chat_id}: {e}", "ERROR")
@@ -748,24 +527,19 @@ class ScheduleBot:
     def auto_check(self):
         if not self.auto_check_enabled:
             return
-        
         log("🔄 Запуск автопроверки...")
-        
         today = datetime.now()
         changed_dates = []
-        
         for i in range(Config.CHECK_DAYS_AHEAD):
             check_date = (today + timedelta(days=i)).strftime("%Y-%m-%d")
             day_data = self.api.get_day_schedule(check_date)
             new_hash = get_schedule_hash(day_data)
-            
             if self.cache.has_changed(check_date, new_hash):
                 log(f"📢 Изменения на {check_date}!")
                 changed_dates.append(check_date)
                 self.cache.set(check_date, new_hash)
             else:
                 log(f"✅ Без изменений: {check_date}")
-        
         if changed_dates:
             self.send_change_notification(changed_dates)
         else:
@@ -776,9 +550,7 @@ class ScheduleBot:
         log("🤖 ЗАПУСК АВТОПРОВЕРКИ")
         log(f"⏱️ Интервал: {Config.AUTO_CHECK_INTERVAL // 60} мин")
         log(f"📅 Проверка дней: {Config.CHECK_DAYS_AHEAD}")
-        log(f"🎓 Группа: {Config.GROUP_NAME}")
         log("=" * 50)
-        
         while True:
             try:
                 self.auto_check()
@@ -796,16 +568,12 @@ class ScheduleBot:
         log("🤖 ЗАПУСК TELEGRAM БОТА")
         log(f"🔑 Токен: {Config.TELEGRAM_BOT_TOKEN[:20]}...")
         log(f"🎓 Группа: {Config.GROUP_NAME}")
-        log(f"⏱️ Таймаут: {Config.TELEGRAM_TIMEOUT} сек")
         log("=" * 50)
-        
         auto_thread = threading.Thread(target=self.run_auto_check_loop, daemon=True)
         auto_thread.start()
-        
         self.bot.infinity_polling(timeout=Config.TELEGRAM_TIMEOUT, long_polling_timeout=Config.TELEGRAM_TIMEOUT)
 
 
-# ======================== ЗАПУСК ========================
 if __name__ == "__main__":
     try:
         import requests
@@ -819,14 +587,12 @@ if __name__ == "__main__":
     print("\n" + "=" * 50)
     print("🎓 БОТ РАСПИСАНИЯ v3.0")
     print(f"   Группа: {Config.GROUP_NAME}")
-    print("   Сайт: poo.edu-74.ru")
-    print("   Автопроверка: 20 мин")
-    print("   Проверка: 7 дней вперёд")
-    print("   Таймаут: 60 сек")
-    print("   Кнопки: ✅")
     print(f"   Owner ID: {Config.OWNER_ID}")
     print("=" * 50 + "\n")
     
     bot = ScheduleBot()
     bot.run()
+
+
+
 
