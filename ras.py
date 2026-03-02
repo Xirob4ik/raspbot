@@ -98,7 +98,7 @@ class ScheduleAPI:
             end_date=end_date
         )
         try:
-            log(f"📡 Запрос: {start_date} → {end_date}")
+            log(f"📡 Запрос: {start_date} -> {end_date}")
             response = self.session.get(url, timeout=15)
             response.raise_for_status()
             content = response.text
@@ -143,15 +143,23 @@ class ScheduleAPI:
                     return day
         return None
     
+    def get_current_week_schedule(self):
+        today = datetime.now()
+        monday = today - timedelta(days=today.weekday())
+        monday_str = monday.strftime("%Y-%m-%d")
+        sunday_str = (monday + timedelta(days=6)).strftime("%Y-%m-%d")
+        return self.get_schedule_data(monday_str, sunday_str)
+    
+    def get_next_week_schedule(self):
+        today = datetime.now()
+        next_monday = today + timedelta(days=(7 - today.weekday()))
+        monday_str = next_monday.strftime("%Y-%m-%d")
+        sunday_str = (next_monday + timedelta(days=6)).strftime("%Y-%m-%d")
+        return self.get_schedule_data(monday_str, sunday_str)
+    
     def get_week_schedule(self, start_date):
         end_date = (datetime.strptime(start_date, "%Y-%m-%d") + timedelta(days=6)).strftime("%Y-%m-%d")
         return self.get_schedule_data(start_date, end_date)
-    
-    def get_next_week_schedule(self, start_date):
-        next_week = datetime.strptime(start_date, "%Y-%m-%d") + timedelta(days=7)
-        monday = next_week - timedelta(days=next_week.weekday())
-        end_date = (monday + timedelta(days=6)).strftime("%Y-%m-%d")
-        return self.get_schedule_data(monday.strftime("%Y-%m-%d"), end_date)
 
 
 def format_lesson(lesson, number):
@@ -343,15 +351,22 @@ class UserManager:
             self.users[chat_id] = {"added": datetime.now().isoformat(), "last_seen": datetime.now().isoformat()}
             self._save()
             log(f"✅ Новый пользователь: {chat_id}")
+            return True
+        return False
     
     def update_user(self, chat_id):
         chat_id = str(chat_id)
         if chat_id in self.users:
             self.users[chat_id]["last_seen"] = datetime.now().isoformat()
             self._save()
+        else:
+            self.add_user(chat_id)
     
     def get_all_users(self):
         return list(self.users.keys())
+    
+    def get_users_count(self):
+        return len(self.users)
 
 
 class ScheduleBot:
@@ -363,16 +378,21 @@ class ScheduleBot:
         self.auto_check_enabled = True
         self._setup_commands()
         log("✅ Telegram бот создан")
+        log(f"👥 Всего пользователей: {self.users.get_users_count()}")
     
     def _setup_commands(self):
         @self.bot.message_handler(commands=['start'])
         def cmd_start(message):
-            self.users.add_user(message.chat.id)
-            help_text = f"╔══════════════════════════════════════╗\n     🎓 РАСПИСАНИЕ ГРУППЫ {Config.GROUP_NAME}\n╚══════════════════════════════════════╝\n\nВыберите нужный пункт в меню 👇"
+            is_new = self.users.add_user(message.chat.id)
+            if is_new:
+                help_text = f"╔══════════════════════════════════════╗\n     🎓 РАСПИСАНИЕ ГРУППЫ {Config.GROUP_NAME}\n╚══════════════════════════════════════╝\n\nВыберите нужный пункт в меню 👇"
+            else:
+                help_text = f"👋 С возвращением!\n\n╔══════════════════════════════════════╗\n     🎓 РАСПИСАНИЕ ГРУППЫ {Config.GROUP_NAME}\n╚══════════════════════════════════════╝\n\nВыберите нужный пункт в меню 👇"
             self.bot.send_message(message.chat.id, help_text, reply_markup=get_main_keyboard(), parse_mode="Markdown")
         
         @self.bot.message_handler(commands=['help'])
         def cmd_help(message):
+            self.users.update_user(message.chat.id)
             help_text = f"╔══════════════════════════════════════╗\n     🎓 РАСПИСАНИЕ ГРУППЫ {Config.GROUP_NAME}\n╚══════════════════════════════════════╝\n\n*📌 Доступные команды:*\n\n📅 */today* — расписание на сегодня\n📅 */tomorrow* — расписание на завтра\n📅 */week* — расписание на неделю\n📅 */date YYYY-MM-DD* — на конкретную дату\n\n⚙️ */status* — статус бота\n🔔 */on* — включить уведомления\n🔕 */off* — отключить уведомления"
             self.bot.reply_to(message, help_text, parse_mode="Markdown")
         
@@ -395,7 +415,7 @@ class ScheduleBot:
                 except Exception as e:
                     failed += 1
                     log(f"❌ Не отправлено {chat_id}: {e}", "ERROR")
-            report = f"✅ Рассылка: {sent} доставлено, {failed} ошибок"
+            report = f"✅ Рассылка: {sent} доставлено, {failed} ошибок\n👥 Всего пользователей: {len(users)}"
             self.bot.send_message(message.chat.id, report)
         
         @self.bot.message_handler(func=lambda message: message.text == "📅 Сегодня")
@@ -417,23 +437,21 @@ class ScheduleBot:
         @self.bot.message_handler(func=lambda message: message.text == "📆 Текущая неделя")
         def btn_week(message):
             self.users.update_user(message.chat.id)
-            today = datetime.now().strftime("%Y-%m-%d")
-            week_data = self.api.get_week_schedule(today)
-            text = format_week_schedule(week_data, "текущую неделю")
+            week_data = self.api.get_current_week_schedule()
+            text = format_week_schedule(week_data, "текущую неделю (с понедельника)")
             self.bot.send_message(message.chat.id, text, reply_markup=get_main_keyboard(), parse_mode="Markdown")
         
         @self.bot.message_handler(func=lambda message: message.text == "📆 Следующая неделя")
         def btn_next_week(message):
             self.users.update_user(message.chat.id)
-            today = datetime.now().strftime("%Y-%m-%d")
-            week_data = self.api.get_next_week_schedule(today)
-            text = format_week_schedule(week_data, "следующую неделю")
+            week_data = self.api.get_next_week_schedule()
+            text = format_week_schedule(week_data, "следующую неделю (с понедельника)")
             self.bot.send_message(message.chat.id, text, reply_markup=get_main_keyboard(), parse_mode="Markdown")
         
         @self.bot.message_handler(func=lambda message: message.text == "⚙️ Настройки")
         def btn_settings(message):
             self.users.update_user(message.chat.id)
-            settings_text = f"⚙️ *НАСТРОЙКИ БОТА*\n\n🤖 *Статус:*\n• Автопроверка: каждые 20 мин\n• Сегодня: {datetime.now().strftime('%d.%m.%Y')}\n• Пользователей: {len(self.users.get_all_users())}\n\n🔔 *Уведомления:*\n{'✅ Включены' if self.auto_check_enabled else '❌ Выключены'}"
+            settings_text = f"⚙️ *НАСТРОЙКИ БОТА*\n\n🤖 *Статус:*\n• Автопроверка: каждые 20 мин\n• Сегодня: {datetime.now().strftime('%d.%m.%Y')}\n• Пользователей: {self.users.get_users_count()}\n\n🔔 *Уведомления:*\n{'✅ Включены' if self.auto_check_enabled else '❌ Выключены'}"
             markup = types.InlineKeyboardMarkup(row_width=2)
             markup.add(types.InlineKeyboardButton("🔔 Включить", callback_data="notify_on"), types.InlineKeyboardButton("🔕 Выключить", callback_data="notify_off"))
             markup.add(types.InlineKeyboardButton("🔙 Назад", callback_data="back_main"))
@@ -471,9 +489,8 @@ class ScheduleBot:
         @self.bot.message_handler(commands=['week'])
         def cmd_week(message):
             self.users.update_user(message.chat.id)
-            today = datetime.now().strftime("%Y-%m-%d")
-            week_data = self.api.get_week_schedule(today)
-            text = format_week_schedule(week_data, "текущую неделю")
+            week_data = self.api.get_current_week_schedule()
+            text = format_week_schedule(week_data, "текущую неделю (с понедельника)")
             self.bot.send_message(message.chat.id, text, reply_markup=get_main_keyboard(), parse_mode="Markdown")
         
         @self.bot.message_handler(commands=['date'])
@@ -495,7 +512,7 @@ class ScheduleBot:
         @self.bot.message_handler(commands=['status'])
         def cmd_status(message):
             self.users.update_user(message.chat.id)
-            status = f"🤖 *Статус бота*\n\n⏱️ Автопроверка: каждые 20 мин\n📅 Сегодня: {datetime.now().strftime('%d.%m.%Y')}\n💾 Кэш дней: {len(self.cache.data)}\n👥 Пользователей: {len(self.users.get_all_users())}\n✅ Статус: Работает"
+            status = f"🤖 *Статус бота*\n\n⏱️ Автопроверка: каждые 20 мин\n📅 Сегодня: {datetime.now().strftime('%d.%m.%Y')}\n💾 Кэш дней: {len(self.cache.data)}\n👥 Пользователей: {self.users.get_users_count()}\n✅ Статус: Работает"
             self.bot.send_message(message.chat.id, status, reply_markup=get_main_keyboard(), parse_mode="Markdown")
         
         @self.bot.message_handler(commands=['off'])
@@ -550,6 +567,7 @@ class ScheduleBot:
         log("🤖 ЗАПУСК АВТОПРОВЕРКИ")
         log(f"⏱️ Интервал: {Config.AUTO_CHECK_INTERVAL // 60} мин")
         log(f"📅 Проверка дней: {Config.CHECK_DAYS_AHEAD}")
+        log(f"👥 Пользователей: {self.users.get_users_count()}")
         log("=" * 50)
         while True:
             try:
@@ -568,6 +586,7 @@ class ScheduleBot:
         log("🤖 ЗАПУСК TELEGRAM БОТА")
         log(f"🔑 Токен: {Config.TELEGRAM_BOT_TOKEN[:20]}...")
         log(f"🎓 Группа: {Config.GROUP_NAME}")
+        log(f"👥 Пользователей: {self.users.get_users_count()}")
         log("=" * 50)
         auto_thread = threading.Thread(target=self.run_auto_check_loop, daemon=True)
         auto_thread.start()
@@ -585,13 +604,17 @@ if __name__ == "__main__":
         sys.exit(1)
     
     print("\n" + "=" * 50)
-    print("🎓 БОТ РАСПИСАНИЯ v3.0")
+    print("🎓 БОТ РАСПИСАНИЯ v4.0")
     print(f"   Группа: {Config.GROUP_NAME}")
     print(f"   Owner ID: {Config.OWNER_ID}")
+    print(f"   Неделя: с понедельника")
     print("=" * 50 + "\n")
     
     bot = ScheduleBot()
     bot.run()
+
+
+
 
 
 
