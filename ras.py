@@ -80,10 +80,16 @@ class Config:
 
 
 def get_main_keyboard():
-    markup = types.ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)
-    markup.add(types.KeyboardButton("📅 Сегодня"), types.KeyboardButton("📅 Завтра"))
-    markup.add(types.KeyboardButton("📆 Текущая неделя"), types.KeyboardButton("📆 Следующая неделя"))
-    markup.add(types.KeyboardButton("⚙️ Настройки"))
+    markup = types.InlineKeyboardMarkup(row_width=2)
+    markup.add(
+        types.InlineKeyboardButton("📅 Сегодня", callback_data="today"),
+        types.InlineKeyboardButton("📅 Завтра", callback_data="tomorrow")
+    )
+    markup.add(
+        types.InlineKeyboardButton("📆 Текущая неделя", callback_data="current_week"),
+        types.InlineKeyboardButton("📆 Следующая неделя", callback_data="next_week")
+    )
+    markup.add(types.InlineKeyboardButton("⚙️ Настройки", callback_data="settings"))
     return markup
 
 
@@ -461,48 +467,38 @@ class ScheduleBot:
             report = f"✅ Рассылка: {sent} доставлено, {failed} ошибок\n👥 Всего пользователей: {len(users)}"
             self.bot.send_message(message.chat.id, report)
         
-        @self.bot.message_handler(func=lambda message: message.text == "📅 Сегодня")
-        def btn_today(message):
-            self.users.update_user(message.chat.id)
-            today = datetime.now().strftime("%Y-%m-%d")
-            day_data = self.api.get_day_schedule(today)
-            text = format_day_schedule(day_data)
-            self.bot.send_message(message.chat.id, text, reply_markup=get_main_keyboard(), parse_mode="Markdown")
-        
-        @self.bot.message_handler(func=lambda message: message.text == "📅 Завтра")
-        def btn_tomorrow(message):
-            self.users.update_user(message.chat.id)
-            tomorrow = (datetime.now() + timedelta(days=1)).strftime("%Y-%m-%d")
-            day_data = self.api.get_day_schedule(tomorrow)
-            text = format_day_schedule(day_data)
-            self.bot.send_message(message.chat.id, text, reply_markup=get_main_keyboard(), parse_mode="Markdown")
-        
-        @self.bot.message_handler(func=lambda message: message.text == "📆 Текущая неделя")
-        def btn_week(message):
-            self.users.update_user(message.chat.id)
-            week_data = self.api.get_current_week_schedule()
-            text = format_week_schedule(week_data, "текущую неделю (с понедельника)")
-            self.bot.send_message(message.chat.id, text, reply_markup=get_main_keyboard(), parse_mode="Markdown")
-        
-        @self.bot.message_handler(func=lambda message: message.text == "📆 Следующая неделя")
-        def btn_next_week(message):
-            self.users.update_user(message.chat.id)
-            week_data = self.api.get_next_week_schedule()
-            text = format_week_schedule(week_data, "следующую неделю (с понедельника)")
-            self.bot.send_message(message.chat.id, text, reply_markup=get_main_keyboard(), parse_mode="Markdown")
-        
-        @self.bot.message_handler(func=lambda message: message.text == "⚙️ Настройки")
-        def btn_settings(message):
-            self.users.update_user(message.chat.id)
-            settings_text = f"⚙️ *НАСТРОЙКИ БОТА*\n\n🤖 *Статус:*\n• Автопроверка: каждые 20 мин\n• Сегодня: {datetime.now().strftime('%d.%m.%Y')}\n• Пользователей: {self.users.get_users_count()}\n\n🔔 *Уведомления:*\n{'✅ Включены' if self.auto_check_enabled else '❌ Выключены'}"
-            markup = types.InlineKeyboardMarkup(row_width=2)
-            markup.add(types.InlineKeyboardButton("🔔 Включить", callback_data="notify_on"), types.InlineKeyboardButton("🔕 Выключить", callback_data="notify_off"))
-            markup.add(types.InlineKeyboardButton("🔙 Назад", callback_data="back_main"))
-            self.bot.send_message(message.chat.id, settings_text, reply_markup=markup, parse_mode="Markdown")
-        
         @self.bot.callback_query_handler(func=lambda call: True)
         def callback_handler(call):
-            if call.data == "notify_on":
+            if call.data == "today":
+                self.users.update_user(call.message.chat.id)
+                today = datetime.now().strftime("%Y-%m-%d")
+                day_data = self.api.get_day_schedule(today)
+                text = format_day_schedule(day_data)
+                self.bot.edit_message_text(text, chat_id=call.message.chat.id, message_id=call.message.message_id, parse_mode="Markdown", reply_markup=get_main_keyboard())
+            elif call.data == "tomorrow":
+                self.users.update_user(call.message.chat.id)
+                tomorrow = (datetime.now() + timedelta(days=1)).strftime("%Y-%m-%d")
+                day_data = self.api.get_day_schedule(tomorrow)
+                text = format_day_schedule(day_data)
+                self.bot.edit_message_text(text, chat_id=call.message.chat.id, message_id=call.message.message_id, parse_mode="Markdown", reply_markup=get_main_keyboard())
+            elif call.data == "current_week":
+                self.users.update_user(call.message.chat.id)
+                week_data = self.api.get_current_week_schedule()
+                text = format_week_schedule(week_data, "текущую неделю (с понедельника)")
+                self.bot.edit_message_text(text, chat_id=call.message.chat.id, message_id=call.message.message_id, parse_mode="Markdown", reply_markup=get_main_keyboard())
+            elif call.data == "next_week":
+                self.users.update_user(call.message.chat.id)
+                week_data = self.api.get_next_week_schedule()
+                text = format_week_schedule(week_data, "следующую неделю (с понедельника)")
+                self.bot.edit_message_text(text, chat_id=call.message.chat.id, message_id=call.message.message_id, parse_mode="Markdown", reply_markup=get_main_keyboard())
+            elif call.data == "settings":
+                self.users.update_user(call.message.chat.id)
+                settings_text = f"⚙️ *НАСТРОЙКИ БОТА*\n\n🤖 *Статус:*\n• Автопроверка: каждые 20 мин\n• Сегодня: {datetime.now().strftime('%d.%m.%Y')}\n• Пользователей: {self.users.get_users_count()}\n\n🔔 *Уведомления:*\n{'✅ Включены' if self.auto_check_enabled else '❌ Выключены'}"
+                markup = types.InlineKeyboardMarkup(row_width=2)
+                markup.add(types.InlineKeyboardButton("🔔 Включить", callback_data="notify_on"), types.InlineKeyboardButton("🔕 Выключить", callback_data="notify_off"))
+                markup.add(types.InlineKeyboardButton("🔙 Назад", callback_data="back_main"))
+                self.bot.edit_message_text(settings_text, chat_id=call.message.chat.id, message_id=call.message.message_id, parse_mode="Markdown", reply_markup=markup)
+            elif call.data == "notify_on":
                 self.auto_check_enabled = True
                 self.bot.answer_callback_query(call.id, "✅ Уведомления включены!")
                 self.bot.edit_message_text(chat_id=call.message.chat.id, message_id=call.message.message_id, text="⚙️ *НАСТРОЙКИ*\n\n🔔 Уведомления: *ВКЛЮЧЕНЫ*", parse_mode="Markdown", reply_markup=get_main_keyboard())
@@ -512,7 +508,6 @@ class ScheduleBot:
                 self.bot.edit_message_text(chat_id=call.message.chat.id, message_id=call.message.message_id, text="⚙️ *НАСТРОЙКИ*\n\n🔕 Уведомления: *ВЫКЛЮЧЕНЫ*", parse_mode="Markdown", reply_markup=get_main_keyboard())
             elif call.data == "back_main":
                 self.bot.edit_message_text(chat_id=call.message.chat.id, message_id=call.message.message_id, text=f"╔══════════════════════════════════════╗\n     🎓 РАСПИСАНИЕ ГРУППЫ {Config.GROUP_NAME}\n╚══════════════════════════════════════╝\n\nВыберите нужный пункт в меню 👇", parse_mode="Markdown", reply_markup=get_main_keyboard())
-        
         @self.bot.message_handler(commands=['today'])
         def cmd_today(message):
             self.users.update_user(message.chat.id)
